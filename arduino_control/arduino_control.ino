@@ -48,7 +48,7 @@ TFT_ILI9163C screen = TFT_ILI9163C(__CS, __DC, __RST);
 /*
   MODELO
 */
- //These constants are imported from the dataset
+//These constants are imported from the dataset
 #define mean_volts 12.16983305
 #define mean_ampers 9.41150109
 #define std_volts 0.68739603
@@ -99,7 +99,8 @@ const BLA::Matrix<1, 1> b3 = {0.27948856};
 unsigned long int LEDS;
 float MedicionLeds();
 void limpiar_pantalla (void);
-void actualizar_pantalla_C (float, float, int, int); //ESTO CAMBIENLO AL TIPO DE VARIABLES QUE MANEJAN
+void actualizar_pantalla_C (float, float, int, int);
+float tiempo(float, float);
 
 
 
@@ -110,15 +111,40 @@ void setup() {
 }
 
 void loop() {
+  //Obtener corriente
   int measure = analogRead(CURRENT);
   int Measure_center = measure-MIDDLE;
   float volt_measure = float(5*Measure_center)/1024;
   float Ampers = volt_measure/FACTOR;
+
+  //Obtener tensión
   float Tension = MedicionLeds();
   float Volts = MedicionLeds()/4;
   
+  float tiempo_res = tiempo(Volts, Ampers);
+
+  //Print the results
+  Serial << "Volts: " << Volts << '\n';
+  Serial << "Ampers: " << Ampers << '\n';
+  Serial << "Time left: " << tiempo_res << '\n';
+
+  /*
+   * Pantalla Variables
+   */
+  int minutosTotales = tiempo_res; // Cambia este valor por la cantidad de minutos que quieras convertir
+  int minutosRestantes = minutosTotales % 60;
+  int horas = (minutosTotales - minutosRestantes)/60;
+  Serial.print("Horas: ");
+  Serial.print(horas);
+  Serial.print(" Minutos restantes: ");
+  Serial.println(minutosRestantes);
+  actualizar_pantalla (Tension, Ampers, horas, minutosRestantes);
+  delay(1000);
+}
+
+float tiempo(float tension, float corriente){
   //The input must be normalized
-  BLA::Matrix<1, 2> X = {(Volts-mean_volts)/std_volts, (Ampers-mean_ampers)/std_ampers};
+  BLA::Matrix<1, 2> X = {(tension-mean_volts)/std_volts, (corriente-mean_ampers)/std_ampers};
  
   //First layer feed-forward
   BLA::Matrix<1, W1.Cols> Z1 = (X * W1)+b1;
@@ -142,24 +168,10 @@ void loop() {
   BLA::Matrix<1, W3.Cols> Z3 = (a2 * W3)+b3;
   BLA::Matrix<1, W3.Cols> y_pred = Z3;
   float Time = y_pred(0,0);
-  //Print the results
-  Serial << "A1: " << a1 << '\n';
-  Serial << "A2: " << Z2 << '\n';
-  Serial << "Prediction: " << y_pred << '\n';
-  Serial << "Time left: " << Time << '\n';
-  /*
-   * Pantalla Variables
-   */
-  int minutosTotales = Time; // Cambia este valor por la cantidad de minutos que quieras convertir
-  int minutosRestantes = minutosTotales % 60;
-  int horas = (minutosTotales - minutosRestantes)/60;
-  Serial.print("Horas: ");
-  Serial.print(horas);
-  Serial.print(" Minutos restantes: ");
-  Serial.println(minutosRestantes);
-  actualizar_pantalla (Tension, Ampers, horas, minutosRestantes);
-  delay(1000);
+  return Time;
+
 }
+
 
 void actualizar_pantalla (float tension, float corriente, int HORA, int MIN)
 {
@@ -188,12 +200,33 @@ void actualizar_pantalla (float tension, float corriente, int HORA, int MIN)
   screen.setCursor(27, 91);
   screen.setTextSize(2);
   screen.print("TIEMPO");
-  screen.setCursor(47, 111);
-  screen.print(HORA);
+
+  if (HORA >= 10){
+    screen.setCursor(37, 111);
+    screen.print(HORA);
+  }
+
+  else{
+    screen.setCursor(37, 111);
+    screen.print("0");
+    screen.setCursor(49, 111);
+    screen.print(HORA);
+  }
+
   screen.setCursor(57, 111);
   screen.print(":");
-  screen.setCursor(65, 111);
-  screen.print(MIN);
+
+  if (MIN >= 10){
+    screen.setCursor(67, 111);
+    screen.print(MIN);
+  }
+
+  else{
+    screen.setCursor(67, 111);
+    screen.print("0");
+    screen.setCursor(79, 111);
+    screen.print(MIN);
+  }
 }
 
 void limpiar_pantalla (void)
