@@ -1,49 +1,34 @@
 /*
  * BIBLIOTECAS
  */
-
-#include <SPI.h>  // VIENE POR DEFAULT
-/*
- * LAS 2 QUE SIGUEN
- * DESCARGUEN LOS 2 .ZIP DE LA SIGUEINTE CARPETA
- * https://etrrar-my.sharepoint.com/:f:/g/personal/mmansilla_etrr_edu_ar/Ej8Ql7-93QNIkEa7tDUm6W4BPBY13N2iVZMJAZT8hyXE9g?e=ICGK85
- * DESPUES EN EL IDE VAN A: PROGRAMA -> INCLUIR LIBRERIA -> AÑADIR BIBLIOTECA .ZIP
- * LO HACEN PARA LOS 2 ARCHIVOS
- */
-#include <TFT_ILI9163C.h>
-#include <Adafruit_GFX.h>
-
+#include <Wire.h> 
+#include <LiquidCrystal_I2C.h>
 #include <math.h>
-
 #include <BasicLinearAlgebra.h>
+#define CARACTERES_LCD 16
+#define LINEAS_LCD 2
+LiquidCrystal_I2C lcd(0x27,CARACTERES_LCD,LINEAS_LCD);  //
+
+using namespace BLA;
+
 /*
  * DEFINICIONES
  */
-#define __DC 9
-#define __CS 10
-//MOSI --> (SDA) --> D11
-#define __RST 12
-// SCLK --> (SCK) --> D13
-
 #define Res1 9500000
 #define Res2 1000000
 #define DivRes 0.095238
 
-/*
- * PANTALLA
- */
-/*
- * COLORES
- */
-#define BLACK   0x0000
-#define WHITE   0xFFFF
 
-TFT_ILI9163C screen = TFT_ILI9163C(__CS, __DC, __RST);
+//Screen
+
 
 //Constantes para la corriente
 #define CURRENT A2
-#define MIDDLE 510
+#define MIDDLE 511
 #define FACTOR 0.066
+
+//Constante para los promedios ponderados exponenciales
+#define beta 0.9
 
 /*
   MODELO
@@ -53,8 +38,6 @@ TFT_ILI9163C screen = TFT_ILI9163C(__CS, __DC, __RST);
 #define mean_ampers 9.41150109
 #define std_volts 0.68739603
 #define std_ampers 13.52794009
-
-using namespace BLA;
 
 //We declare the Weights and biases of each layer
 const BLA::Matrix<2, 16> W1 = { 0.62430006, 0.12717175, 0.42998037, 0.6904147 , 0.27597207,
@@ -97,18 +80,23 @@ const BLA::Matrix<1, 1> b3 = {0.27948856};
  */
  
 unsigned long int LEDS;
-float MedicionLeds();
+float MedicionLeds(void);
 void limpiar_pantalla (void);
 void actualizar_pantalla_C (float, float, int, int);
 float tiempo(float, float);
-
-
+void limpiar (void);
+void pantalla (float, float, int, int);
 
 void setup() {
   Serial.begin(9600);
-  screen.begin();
-  limpiar_pantalla();
+  lcd.backlight();
+  lcd.init();
+  limpiar();
 }
+
+//Variables para el promedio ponderado
+float Av_ampers = 0.0;
+float Av_volts = 0.0;
 
 void loop() {
   //Obtener corriente
@@ -116,12 +104,16 @@ void loop() {
   int Measure_center = measure-MIDDLE;
   float volt_measure = float(5*Measure_center)/1024;
   float Ampers = volt_measure/FACTOR;
+  Av_ampers = beta*Av_ampers+(1-beta)*Ampers;
+  
 
   //Obtener tensión
   float Tension = MedicionLeds();
-  float Volts = MedicionLeds()/4;
+  float Volts = Tension/4;
+  Av_volts = beta*Av_volts+(1-beta)*Volts;
+  float Av_tension = Av_volts*4;
   
-  float tiempo_res = tiempo(Volts, Ampers);
+  float tiempo_res = tiempo(Av_volts, Av_ampers);
 
   //Print the results
   Serial << "Volts: " << Volts << '\n';
@@ -138,7 +130,7 @@ void loop() {
   Serial.print(horas);
   Serial.print(" Minutos restantes: ");
   Serial.println(minutosRestantes);
-  actualizar_pantalla (Tension, Ampers, horas, minutosRestantes);
+  pantalla (Av_tension, Av_ampers, horas, minutosRestantes);
   delay(1000);
 }
 
@@ -173,70 +165,56 @@ float tiempo(float tension, float corriente){
 }
 
 
-void actualizar_pantalla (float tension, float corriente, int HORA, int MIN)
+void pantalla (float volt, float amper, int hora, int minu)
 {
-  limpiar_pantalla();
-  screen.setTextColor(WHITE);
-  screen.setCursor(20, 2);
-  screen.setTextSize(2);
-  screen.print("TENSION");
-  screen.setCursor(20, 21);
-  screen.print(tension);
-  screen.setCursor(93, 21);
-  screen.print("V");
-  screen.setTextSize(1);
-  screen.setCursor(6, 36);
-  screen.print("--------------------");
-  screen.setCursor(12, 46);
-  screen.setTextSize(2);
-  screen.print("CORRIENTE");
-  screen.setCursor(20, 66);
-  screen.print(corriente);
-  screen.setCursor(93, 66);
-  screen.print("A");
-  screen.setTextSize(1);
-  screen.setCursor(6, 81);
-  screen.print("--------------------");
-  screen.setCursor(27, 91);
-  screen.setTextSize(2);
-  screen.print("TIEMPO");
-
-  if (HORA >= 10){
-    screen.setCursor(37, 111);
-    screen.print(HORA);
+  limpiar();
+  lcd.setCursor(0, 0);
+  lcd.print(volt);
+  lcd.setCursor(6, 0);
+  lcd.print("V");
+  lcd.setCursor(9, 0);
+  lcd.print(amper);
+  lcd.setCursor(15, 0);
+  lcd.print("A");
+  lcd.setCursor(0, 0);
+  if (hora < 10)
+  {
+    lcd.setCursor(5,1);
+    lcd.print("0");
+    lcd.print(hora);
+    lcd.setCursor(8, 1);
+    lcd.print(minu);
+    lcd.setCursor(15, 1);
+  }else
+  {
+    lcd.setCursor(5,1);
+    lcd.print(hora);
+    lcd.setCursor(7,1);
+  }
+  lcd.setCursor(7,1);
+  lcd.print(":");
+  if (minu < 10)
+  {
+    lcd.setCursor(8, 1);
+    lcd.print("0");
+    lcd.print(minu);
+    lcd.setCursor(15, 1);
+  }else
+  {
+    lcd.setCursor(8, 1);
+    lcd.print(minu);
+    lcd.setCursor(15, 1);
   }
 
-  else{
-    screen.setCursor(37, 111);
-    screen.print("0");
-    screen.setCursor(49, 111);
-    screen.print(HORA);
-  }
-
-  screen.setCursor(57, 111);
-  screen.print(":");
-
-  if (MIN >= 10){
-    screen.setCursor(67, 111);
-    screen.print(MIN);
-  }
-
-  else{
-    screen.setCursor(67, 111);
-    screen.print("0");
-    screen.setCursor(79, 111);
-    screen.print(MIN);
-  }
 }
 
-void limpiar_pantalla (void)
+void limpiar(void)
 {
-  screen.fillRect(10, 20, 80, 15, BLACK);
-  screen.fillRect(10, 65, 80, 15, BLACK);
-  screen.fillRect(5, 111, 128, 15, BLACK);
+  lcd.clear();
 }
 
-float MedicionLeds(){
+
+float MedicionLeds(void){
   int medicion = analogRead(A0);
   float calculo = (medicion*5);  //Vemos el valor de tension a la salida del divisor de tension.
   float voltaje = calculo/1023;
@@ -256,6 +234,7 @@ float MedicionLeds(){
   Serial.println(LEDS);
   Serial.println(voltaje);
   Serial.println(resultado);  //Sacamos el valor total de las 4 baterias.
+  Serial.print("MEDICION: ");
   Serial.println(medicion);
   return resultado;
 }
