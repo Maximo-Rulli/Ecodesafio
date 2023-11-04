@@ -14,21 +14,21 @@ using namespace BLA;
 /*
  * DEFINICIONES
  */
-#define Res1 9500000
-#define Res2 1000000
-#define DivRes 0.095238
+#define Res1 100000
+#define Res2 10000
+#define DivRes 0.089189
 
 
 //Screen
 
 
 //Constantes para la corriente
-#define CURRENT A2
-#define MIDDLE 511
-#define FACTOR 0.066
+#define CURRENT A7
+#define MIDDLE 519
+#define FACTOR 0.01665
 
 //Constante para los promedios ponderados exponenciales
-#define beta 0.9
+#define beta 0.7
 
 /*
   MODELO
@@ -103,7 +103,7 @@ void loop() {
   int measure = analogRead(CURRENT);
   int Measure_center = measure-MIDDLE;
   float volt_measure = float(5*Measure_center)/1024;
-  float Ampers = volt_measure/FACTOR;
+  float Ampers = abs(volt_measure/FACTOR);
   Av_ampers = beta*Av_ampers+(1-beta)*Ampers;
   
 
@@ -131,7 +131,7 @@ void loop() {
   Serial.print(" Minutos restantes: ");
   Serial.println(minutosRestantes);
   pantalla (Av_tension, Av_ampers, horas, minutosRestantes);
-  delay(1000);
+  delay(2000);
 }
 
 float tiempo(float tension, float corriente){
@@ -216,8 +216,8 @@ void limpiar(void)
 
 float MedicionLeds(void){
   int medicion = analogRead(A0);
-  float calculo = (medicion*5);  //Vemos el valor de tension a la salida del divisor de tension.
-  float voltaje = calculo/1023;
+  float calculo = (medicion*4.634);  //Vemos el valor de tension a la salida del divisor de tension.
+  float voltaje = calculo/1024;
   float resultado = voltaje/DivRes;
   if ((resultado > 49.16) && (resultado <= 52.8)) LEDS = 225; //10 LEDS
   if ((resultado > 48.04) && (resultado <= 49.16)) LEDS = 160; //9 LEDS
